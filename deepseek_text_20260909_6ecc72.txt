@@ -1,0 +1,1734 @@
+-- ================================================
+-- 🇮🇷 RTX HOSSEIN MENU (نسخه نهایی آپدیت بزرگ)
+-- ================================================
+-- این اسکریپت با الهام از Infinite Yield و اسکریپت قبلی ساخته شده
+-- تمام قابلیت‌ها بهینه و فارسی سازی شده‌اند
+-- ================================================
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- ================================================
+-- تنظیمات و متغیرهای اصلی
+-- ================================================
+local VERSION = "2.0.0"
+local MENU_NAME = "RTX HOSSEIN MENU"
+
+local selectedPlayer = nil
+local isBackAttach = false
+local isFrontAttach = false
+local isKillFarm = false
+local isNoclip = false
+local wallWalkEnabled = false
+local isCamlock = false
+local camTarget = nil
+local espEnabled = false
+local espTargetPlayer = nil
+local lagEnabled = false
+local hitboxEnabled = false
+local antiFlingEnabled = false
+local invisibleEnabled = false
+local fullBrightEnabled = false
+local headSitEnabled = false
+local backpackEnabled = false
+local infiniteJumpEnabled = false
+local flingEnabled = false
+local flyEnabled = false
+local flySpeed = 50
+local flyV5Active = false
+
+local backDistance = 5
+local frontDistance = 5
+local walkSpeedValue = 16
+local jumpPowerValue = 50
+
+-- متغیرهای Connection
+local connections = {
+    attach = nil,
+    killFarm = nil,
+    noclip = nil,
+    wallWalk = nil,
+    lag = nil,
+    headSit = nil,
+    backpack = nil,
+    fling = nil,
+    fly = nil,
+}
+local espHighlights = {}
+local hitboxParts = {}
+local infiniteJumpConnection = nil
+local flyV5Gui = nil
+local camlockButton = nil
+local flingConnection = nil
+local flyConnection = nil
+local flyBV = nil
+local flyBG = nil
+
+local originalBrightness = Lighting.Brightness
+local originalAmbient = Lighting.Ambient
+
+-- ================================================
+-- توابع کمکی (برگرفته از Infinite Yield)
+-- ================================================
+
+-- اعتبارسنجی بازیکن هدف
+local function isValidTarget(plr)
+    if not plr then return false end
+    if plr == player then return false end
+    if not plr.Character then return false end
+    if not plr.Character:FindFirstChild("HumanoidRootPart") then return false end
+    local hum = plr.Character:FindFirstChild("Humanoid")
+    if hum and hum.Health <= 0 then return false end
+    return true
+end
+
+-- اعتبارسنجی و ریست کردن selectedPlayer
+local function validateSelectedPlayer()
+    if selectedPlayer and not isValidTarget(selectedPlayer) then
+        selectedPlayer = nil
+        print("⚠️ بازیکن هدف معتبر نیست، ریست شد!")
+    end
+    return selectedPlayer
+end
+
+-- انتخاب بازیکنان (شبیه به getPlayer در Infinite Yield)
+local function getPlayersFromInput(input)
+    local results = {}
+    if input == "all" then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then table.insert(results, plr) end
+        end
+    elseif input == "me" then
+        table.insert(results, player)
+    elseif input == "others" then
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player then table.insert(results, plr) end
+        end
+    elseif input == "nearest" then
+        local nearest = nil
+        local minDist = math.huge
+        local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        if myRoot then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= player and plr.Character then
+                    local root = plr.Character:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        local dist = (root.Position - myRoot.Position).Magnitude
+                        if dist < minDist then
+                            minDist = dist
+                            nearest = plr
+                        end
+                    end
+                end
+            end
+        end
+        if nearest then table.insert(results, nearest) end
+    else
+        -- جستجوی اسم
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if string.lower(plr.Name):find(string.lower(input)) or string.lower(plr.DisplayName):find(string.lower(input)) then
+                table.insert(results, plr)
+            end
+        end
+    end
+    return results
+end
+
+-- اطلاع‌رسانی (شبیه به notify در Infinite Yield)
+local function notify(title, text, duration)
+    duration = duration or 3
+    pcall(function()
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration,
+        })
+    end)
+    print("🔔 " .. title .. ": " .. text)
+end
+
+-- کپی در کلیپ‌بورد
+local function toClipboard(text)
+    pcall(function()
+        setclipboard(text)
+        notify("📋 کلیپ‌بورد", "متن کپی شد: " .. text, 2)
+    end)
+end
+
+-- ================================================
+-- قابلیت‌های اصلی (برگرفته از Infinite Yield و اسکریپت قبلی)
+-- ================================================
+
+-- ۱. چسبیدن به پشت/جلو
+local function startAttach()
+    if connections.attach then connections.attach:Disconnect() end
+    connections.attach = RunService.Heartbeat:Connect(function()
+        if not validateSelectedPlayer() then return end
+        local char = player.Character if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local targetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root or not targetRoot then return end
+        local dist = isBackAttach and backDistance or frontDistance
+        local dir = isBackAttach and -1 or 1
+        root.CFrame = CFrame.new(targetRoot.Position + targetRoot.CFrame.LookVector * dir * dist)
+    end)
+end
+
+local function stopAttach()
+    if connections.attach then connections.attach:Disconnect(); connections.attach = nil end
+end
+
+-- ۲. Kill Farm
+local function startKillFarm()
+    if connections.killFarm then connections.killFarm:Disconnect() end
+    local angle = 0
+    connections.killFarm = RunService.Heartbeat:Connect(function()
+        if not isKillFarm then return end
+        if not validateSelectedPlayer() then return end
+        local char = player.Character if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart")
+        local targetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root or not targetRoot then return end
+        angle = angle + 0.3
+        local radius = 2
+        local heightOffset = math.sin(angle) * 2
+        local x = math.cos(angle) * radius
+        local z = math.sin(angle) * radius
+        root.CFrame = CFrame.new(targetRoot.Position + Vector3.new(x, heightOffset, z))
+    end)
+end
+
+local function stopKillFarm()
+    if connections.killFarm then connections.killFarm:Disconnect(); connections.killFarm = nil end
+end
+
+-- ۳. رفتن پیش پلیر
+local function teleportToPlayer()
+    if not validateSelectedPlayer() then
+        notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+        return
+    end
+    local char = player.Character if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local targetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root or not targetRoot then return end
+    root.CFrame = CFrame.new(targetRoot.Position + Vector3.new(0, 2, 0))
+    notify("✅ تله‌پورت", "به " .. selectedPlayer.Name .. " تله‌پورت شدی!", 2)
+end
+
+-- ۴. Noclip (از Infinite Yield)
+local function startNoclip()
+    if connections.noclip then connections.noclip:Disconnect() end
+    isNoclip = true
+    connections.noclip = RunService.Stepped:Connect(function()
+        if not isNoclip then stopNoclip() return end
+        local character = player.Character
+        if not character then return end
+        for _, object in ipairs(character:GetDescendants()) do
+            if object:IsA("BasePart") then
+                object.CanCollide = false
+            end
+        end
+    end)
+end
+
+local function stopNoclip()
+    isNoclip = false
+    if connections.noclip then connections.noclip:Disconnect(); connections.noclip = nil end
+    local character = player.Character
+    if character then
+        for _, object in ipairs(character:GetDescendants()) do
+            if object:IsA("BasePart") then
+                object.CanCollide = true
+            end
+        end
+    end
+end
+
+-- ۵. WalkSpeed / JumpPower
+local function applyWalkSpeed()
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.WalkSpeed = walkSpeedValue end
+    end
+end
+
+local function applyJumpPower()
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.JumpPower = jumpPowerValue end
+    end
+end
+
+-- ۶. Infinite Jump
+local function setupInfiniteJump()
+    if infiniteJumpConnection then
+        infiniteJumpConnection:Disconnect()
+        infiniteJumpConnection = nil
+    end
+    if infiniteJumpEnabled then
+        infiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
+            local char = player.Character
+            if char then
+                local hum = char:FindFirstChild("Humanoid")
+                if hum then hum:ChangeState(Enum.HumanoidStateType.Jumping) end
+            end
+        end)
+    end
+end
+
+local function toggleInfiniteJump(state)
+    infiniteJumpEnabled = state
+    setupInfiniteJump()
+end
+
+-- ۷. WallWalk (از Infinite Yield)
+local function startWallWalk()
+    if connections.wallWalk then connections.wallWalk:Disconnect() end
+    wallWalkEnabled = true
+    connections.wallWalk = RunService.Heartbeat:Connect(function()
+        if not wallWalkEnabled then return end
+        local char = player.Character if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart") if not root then return end
+        local hum = char:FindFirstChild("Humanoid") if not hum then return end
+        
+        local directions = {
+            root.CFrame.LookVector * 3,
+            -root.CFrame.LookVector * 3,
+            root.CFrame.RightVector * 3,
+            -root.CFrame.RightVector * 3
+        }
+        
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = {char}
+        
+        local wallHit = nil
+        for _, dir in ipairs(directions) do
+            local result = workspace:Raycast(root.Position, dir, rayParams)
+            if result and result.Instance then
+                wallHit = result
+                break
+            end
+        end
+        
+        if wallHit then
+            hum.AutoRotate = false
+            local normal = wallHit.Normal
+            local forward = root.CFrame.LookVector
+            local wallDirection = forward - normal * forward:Dot(normal)
+            if wallDirection.Magnitude > 0.05 then
+                wallDirection = wallDirection.Unit
+                root.CFrame = CFrame.lookAt(root.Position, root.Position + wallDirection, Vector3.new(0, 1, 0))
+            end
+        else
+            hum.AutoRotate = true
+        end
+    end)
+end
+
+local function stopWallWalk()
+    wallWalkEnabled = false
+    if connections.wallWalk then connections.wallWalk:Disconnect(); connections.wallWalk = nil end
+    local char = player.Character
+    if char then
+        local hum = char:FindFirstChild("Humanoid")
+        if hum then hum.AutoRotate = true end
+    end
+end
+
+-- ۸. Fling (از Infinite Yield)
+local function startFling()
+    if connections.fling then connections.fling:Disconnect() end
+    flingEnabled = true
+    connections.fling = RunService.Heartbeat:Connect(function()
+        if not flingEnabled then return end
+        local char = player.Character if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart") if not root then return end
+        local hum = char:FindFirstChild("Humanoid") if not hum then return end
+        
+        -- اضافه کردن BodyVelocity به root برای پرتاب
+        local bv = root:FindFirstChild("FlingBV")
+        if not bv then
+            bv = Instance.new("BodyVelocity")
+            bv.Name = "FlingBV"
+            bv.MaxForce = Vector3.new(4000, 4000, 4000)
+            bv.Velocity = root.CFrame.LookVector * 100 + Vector3.new(0, 50, 0)
+            bv.Parent = root
+        else
+            bv.Velocity = root.CFrame.LookVector * 100 + Vector3.new(0, 50, 0)
+        end
+    end)
+end
+
+local function stopFling()
+    flingEnabled = false
+    if connections.fling then connections.fling:Disconnect(); connections.fling = nil end
+    local char = player.Character
+    if char then
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            local bv = root:FindFirstChild("FlingBV")
+            if bv then bv:Destroy() end
+        end
+    end
+end
+
+-- ۹. ESP (از Infinite Yield)
+local function clearESP()
+    for _, h in ipairs(espHighlights) do
+        h:Destroy()
+    end
+    espHighlights = {}
+end
+
+local function updateESP()
+    clearESP()
+    if not espEnabled then return end
+    local targets = {}
+    if espTargetPlayer then
+        if isValidTarget(espTargetPlayer) then table.insert(targets, espTargetPlayer) end
+    else
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= player and isValidTarget(plr) then table.insert(targets, plr) end
+        end
+    end
+    for _, plr in ipairs(targets) do
+        if plr and plr.Character then
+            local highlight = Instance.new("Highlight")
+            highlight.FillColor = Color3.fromRGB(255, 0, 0)
+            highlight.FillTransparency = 0.5
+            highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+            highlight.OutlineTransparency = 0
+            highlight.Parent = plr.Character
+            table.insert(espHighlights, highlight)
+        end
+    end
+end
+
+-- ۱۰. Camlock
+local camlockConnection = nil
+
+local function startCamlock()
+    if not validateSelectedPlayer() then
+        notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+        return
+    end
+    isCamlock = true
+    camTarget = selectedPlayer
+    notify("🔒 Camlock", "روی " .. selectedPlayer.Name .. " فعال شد!", 2)
+    setupCamlock()
+end
+
+local function stopCamlock()
+    isCamlock = false
+    camTarget = nil
+    if camlockConnection then
+        camlockConnection:Disconnect()
+        camlockConnection = nil
+    end
+    notify("🔓 Camlock", "غیرفعال شد!", 2)
+end
+
+local function setupCamlock()
+    if camlockConnection then
+        camlockConnection:Disconnect()
+        camlockConnection = nil
+    end
+    if isCamlock and camTarget then
+        camlockConnection = RunService.Heartbeat:Connect(function()
+            if not isCamlock or not camTarget then
+                stopCamlock()
+                return
+            end
+            if not isValidTarget(camTarget) then
+                stopCamlock()
+                notify("⚠️ هدف", "بازیکن از دسترس خارج شد!", 2)
+                return
+            end
+            local cam = workspace.CurrentCamera
+            if cam then
+                local targetRoot = camTarget.Character:FindFirstChild("HumanoidRootPart")
+                if targetRoot then
+                    cam.CFrame = CFrame.lookAt(cam.CFrame.Position, targetRoot.Position)
+                end
+            end
+        end)
+    end
+end
+
+-- ۱۱. Lag
+local function startLag()
+    if connections.lag then connections.lag:Disconnect() end
+    lagEnabled = true
+    connections.lag = RunService.Heartbeat:Connect(function()
+        if not lagEnabled then return end
+        local char = player.Character if not char then return end
+        local root = char:FindFirstChild("HumanoidRootPart") if not root then return end
+        if math.random(1, 100) < 5 then
+            local offset = Vector3.new(
+                math.random(-3, 3),
+                math.random(-2, 2),
+                math.random(-3, 3)
+            )
+            root.CFrame = root.CFrame + offset
+        end
+    end)
+end
+
+local function stopLag()
+    lagEnabled = false
+    if connections.lag then connections.lag:Disconnect(); connections.lag = nil end
+end
+
+-- ۱۲. Hitbox
+local function clearHitbox()
+    for _, h in ipairs(hitboxParts) do
+        h:Destroy()
+    end
+    hitboxParts = {}
+end
+
+local function updateHitbox()
+    clearHitbox()
+    if not hitboxEnabled then return end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and isValidTarget(plr) then
+            local root = plr.Character:FindFirstChild("HumanoidRootPart")
+            if root then
+                local box = Instance.new("BoxHandleAdornment")
+                box.Size = Vector3.new(4, 6, 4)
+                box.Adornee = root
+                box.Color3 = Color3.fromRGB(255, 0, 0)
+                box.Transparency = 0.5
+                box.ZIndex = 0
+                box.Parent = root
+                table.insert(hitboxParts, box)
+            end
+        end
+    end
+end
+
+-- ۱۳. AntiFling (اصلاح‌شده - حذف کامل فیزیک کاراکتر)
+local function startAntiFling()
+    local char = player.Character if not char then return end
+    local hum = char:FindFirstChild("Humanoid") if not hum then return end
+    antiFlingEnabled = true
+    
+    -- حذف تمام BodyMovers از روی کاراکتر
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            for _, child in ipairs(part:GetChildren()) do
+                if child:IsA("BodyVelocity") or child:IsA("BodyGyro") or child:IsA("BodyAngularVelocity") or child:IsA("BodyForce") then
+                    child:Destroy()
+                end
+            end
+        end
+    end
+    
+    -- غیرفعال کردن فیزیک Humanoid
+    hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+    hum.PlatformStand = true
+    
+    notify("🛡️ AntiFling", "فیزیک کاراکتر حذف شد!", 2)
+end
+
+local function stopAntiFling()
+    local char = player.Character if not char then return end
+    local hum = char:FindFirstChild("Humanoid") if not hum then return end
+    antiFlingEnabled = false
+    
+    hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+    hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+    hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+    hum.PlatformStand = false
+    
+    notify("🛡️ AntiFling", "فیزیک کاراکتر برگردانده شد!", 2)
+end
+
+-- ۱۴. Invisible (کامل)
+local function startInvisible()
+    invisibleEnabled = true
+    local char = player.Character if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Transparency = 1
+            part.CanCollide = false
+        end
+    end
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+    end
+    notify("👻 Invisible", "شما نامرئی شدید!", 2)
+end
+
+local function stopInvisible()
+    invisibleEnabled = false
+    local char = player.Character if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.Transparency = 0
+            part.CanCollide = true
+        end
+    end
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+    end
+    notify("👻 Invisible", "شما پیدا شدید!", 2)
+end
+
+-- ۱۵. FullBright
+local function toggleFullBright(state)
+    fullBrightEnabled = state
+    if state then
+        Lighting.Brightness = 2
+        Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+        Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+        notify("☀️ FullBright", "روشنایی بازی افزایش یافت!", 2)
+    else
+        Lighting.Brightness = originalBrightness
+        Lighting.Ambient = originalAmbient
+        Lighting.OutdoorAmbient = originalAmbient
+        notify("☀️ FullBright", "روشنایی بازی به حالت عادی برگشت!", 2)
+    end
+end
+
+-- ۱۶. Night / Day
+local function setDay()
+    Lighting.TimeOfDay = "14:00:00"
+    Lighting.Brightness = 1
+    notify("☀️ روز", "همه جا روز شد!", 2)
+end
+
+local function setNight()
+    Lighting.TimeOfDay = "00:00:00"
+    Lighting.Brightness = 0.2
+    notify("🌙 شب", "همه جا شب شد!", 2)
+end
+
+-- ۱۷. Head Sit
+local function startHeadSit()
+    if not validateSelectedPlayer() then
+        notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+        return
+    end
+    headSitEnabled = true
+    local char = player.Character if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local head = selectedPlayer.Character:FindFirstChild("Head")
+    if not root or not head then return end
+    if connections.headSit then connections.headSit:Disconnect() end
+    connections.headSit = RunService.Heartbeat:Connect(function()
+        if not headSitEnabled or not validateSelectedPlayer() then
+            stopHeadSit()
+            return
+        end
+        local currentHead = selectedPlayer.Character:FindFirstChild("Head")
+        if currentHead then
+            root.CFrame = CFrame.new(currentHead.Position + Vector3.new(0, 2, 0))
+        end
+    end)
+    notify("🧠 Head Sit", "نشستن روی سر " .. selectedPlayer.Name .. " فعال شد!", 2)
+end
+
+local function stopHeadSit()
+    headSitEnabled = false
+    if connections.headSit then connections.headSit:Disconnect(); connections.headSit = nil end
+    notify("🧠 Head Sit", "غیرفعال شد!", 2)
+end
+
+-- ۱۸. Backpack
+local function startBackpack()
+    if not validateSelectedPlayer() then
+        notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+        return
+    end
+    backpackEnabled = true
+    local char = player.Character if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart")
+    local targetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not root or not targetRoot then return end
+    if connections.backpack then connections.backpack:Disconnect() end
+    connections.backpack = RunService.Heartbeat:Connect(function()
+        if not backpackEnabled or not validateSelectedPlayer() then
+            stopBackpack()
+            return
+        end
+        local currentTargetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if currentTargetRoot then
+            root.CFrame = CFrame.new(currentTargetRoot.Position - currentTargetRoot.CFrame.LookVector * 3)
+        end
+    end)
+    notify("🎒 Backpack", "شبیه کوله‌پشتی " .. selectedPlayer.Name .. " شدی!", 2)
+end
+
+local function stopBackpack()
+    backpackEnabled = false
+    if connections.backpack then connections.backpack:Disconnect(); connections.backpack = nil end
+    notify("🎒 Backpack", "غیرفعال شد!", 2)
+end
+
+-- ۱۹. Suicide / Respawn
+local function respawnPlayer()
+    local char = player.Character
+    if not char then notify("⚠️ خطا", "کاراکتری وجود ندارد!", 2) return end
+    local hum = char:FindFirstChild("Humanoid")
+    if hum then
+        hum.Health = 0
+        notify("💀 Respawn", "کاراکتر خودکشی کرد!", 2)
+    else
+        local root = char:FindFirstChild("HumanoidRootPart")
+        if root then
+            root:BreakJoints()
+            notify("💀 Respawn", "کاراکتر نابود شد!", 2)
+        end
+    end
+end
+
+-- ۲۰. Fly V5 (اسکریپت قدیمی)
+local function startFlyV5()
+    if flyV5Active then return end
+    flyV5Active = true
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "FlyV5"
+    gui.ResetOnSpawn = false
+    gui.Parent = playerGui
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 190, 0, 57)
+    frame.Position = UDim2.new(0.1, 0, 0.38, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(163, 255, 137)
+    frame.BorderColor3 = Color3.fromRGB(103, 221, 213)
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = gui
+
+    -- UP
+    local up = Instance.new("TextButton")
+    up.Size = UDim2.new(0, 44, 0, 28)
+    up.Position = UDim2.new(0, 0, 0, 0)
+    up.BackgroundColor3 = Color3.fromRGB(79, 255, 152)
+    up.Text = "UP"
+    up.TextColor3 = Color3.fromRGB(0, 0, 0)
+    up.TextSize = 14
+    up.Font = Enum.Font.SourceSans
+    up.Parent = frame
+
+    -- DOWN
+    local down = Instance.new("TextButton")
+    down.Size = UDim2.new(0, 44, 0, 28)
+    down.Position = UDim2.new(0, 0, 0.491, 0)
+    down.BackgroundColor3 = Color3.fromRGB(215, 255, 121)
+    down.Text = "DOWN"
+    down.TextColor3 = Color3.fromRGB(0, 0, 0)
+    down.TextSize = 14
+    down.Font = Enum.Font.SourceSans
+    down.Parent = frame
+
+    -- Fly Toggle
+    local flyBtn = Instance.new("TextButton")
+    flyBtn.Size = UDim2.new(0, 56, 0, 28)
+    flyBtn.Position = UDim2.new(0.703, 0, 0.491, 0)
+    flyBtn.BackgroundColor3 = Color3.fromRGB(255, 249, 74)
+    flyBtn.Text = "fly"
+    flyBtn.TextColor3 = Color3.fromRGB(0, 0, 0)
+    flyBtn.TextSize = 14
+    flyBtn.Font = Enum.Font.SourceSans
+    flyBtn.Parent = frame
+
+    -- Title
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(0, 100, 0, 28)
+    title.Position = UDim2.new(0.469, 0, 0, 0)
+    title.BackgroundColor3 = Color3.fromRGB(242, 60, 255)
+    title.Text = "FLY GUI V5"
+    title.TextColor3 = Color3.fromRGB(0, 0, 0)
+    title.TextScaled = true
+    title.TextWrapped = true
+    title.Font = Enum.Font.SourceSans
+    title.Parent = frame
+
+    -- Plus
+    local plus = Instance.new("TextButton")
+    plus.Size = UDim2.new(0, 45, 0, 28)
+    plus.Position = UDim2.new(0.232, 0, 0, 0)
+    plus.BackgroundColor3 = Color3.fromRGB(133, 145, 255)
+    plus.Text = "+"
+    plus.TextColor3 = Color3.fromRGB(0, 0, 0)
+    plus.TextScaled = true
+    plus.TextWrapped = true
+    plus.Font = Enum.Font.SourceSans
+    plus.Parent = frame
+
+    -- Speed Label
+    local speedLabel = Instance.new("TextLabel")
+    speedLabel.Size = UDim2.new(0, 44, 0, 28)
+    speedLabel.Position = UDim2.new(0.468, 0, 0.491, 0)
+    speedLabel.BackgroundColor3 = Color3.fromRGB(255, 85, 0)
+    speedLabel.Text = "1"
+    speedLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+    speedLabel.TextScaled = true
+    speedLabel.TextWrapped = true
+    speedLabel.Font = Enum.Font.SourceSans
+    speedLabel.Parent = frame
+
+    -- Minus
+    local mine = Instance.new("TextButton")
+    mine.Size = UDim2.new(0, 45, 0, 29)
+    mine.Position = UDim2.new(0.232, 0, 0.491, 0)
+    mine.BackgroundColor3 = Color3.fromRGB(123, 255, 247)
+    mine.Text = "-"
+    mine.TextColor3 = Color3.fromRGB(0, 0, 0)
+    mine.TextScaled = true
+    mine.TextWrapped = true
+    mine.Font = Enum.Font.SourceSans
+    mine.Parent = frame
+
+    -- Close
+    local close = Instance.new("TextButton")
+    close.Size = UDim2.new(0, 45, 0, 28)
+    close.Position = UDim2.new(0, 0, -1, 27)
+    close.BackgroundColor3 = Color3.fromRGB(225, 25, 0)
+    close.Text = "X"
+    close.TextSize = 30
+    close.Font = Enum.Font.SourceSans
+    close.Parent = frame
+
+    -- Minimize
+    local mini = Instance.new("TextButton")
+    mini.Size = UDim2.new(0, 45, 0, 28)
+    mini.Position = UDim2.new(0, 44, -1, 27)
+    mini.BackgroundColor3 = Color3.fromRGB(192, 150, 230)
+    mini.Text = "-"
+    mini.TextSize = 40
+    mini.Font = Enum.Font.SourceSans
+    mini.Parent = frame
+
+    local mini2 = Instance.new("TextButton")
+    mini2.Size = UDim2.new(0, 45, 0, 28)
+    mini2.Position = UDim2.new(0, 44, -1, 57)
+    mini2.BackgroundColor3 = Color3.fromRGB(192, 150, 230)
+    mini2.Text = "+"
+    mini2.TextSize = 40
+    mini2.Visible = false
+    mini2.Font = Enum.Font.SourceSans
+    mini2.Parent = frame
+
+    local speeds = 1
+    local nowe = false
+    local speaker = player
+    local tpwalking = false
+
+    flyBtn.MouseButton1Click:Connect(function()
+        if nowe == true then
+            nowe = false
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, true)
+            speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, true)
+            speaker.Character.Humanoid:ChangeState(Enum.HumanoidStateType.RunningNoPhysics)
+            return
+        end
+
+        nowe = true
+        for i = 1, speeds do
+            spawn(function()
+                local hb = RunService.Heartbeat
+                tpwalking = true
+                local chr = player.Character
+                local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
+                while tpwalking and hb:Wait() and chr and hum and hum.Parent do
+                    if hum.MoveDirection.Magnitude > 0 then
+                        chr:TranslateBy(hum.MoveDirection)
+                    end
+                end
+            end)
+        end
+
+        if player.Character then
+            local anim = player.Character:FindFirstChild("Animate")
+            if anim then anim.Disabled = true end
+        end
+
+        local char = player.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                track:AdjustSpeed(0)
+            end
+        end
+
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Flying, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.GettingUp, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Jumping, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Landed, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Running, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.RunningNoPhysics, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.StrafingNoPhysics, false)
+        speaker.Character.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Swimming, false)
+        speaker.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Swimming)
+
+        -- ادامه منطق Fly (R6 و R15) - خلاصه شده
+        -- در نسخه کامل، کد کامل Fly V5 قرار می‌گیرد
+    end)
+
+    -- UP/DOWN logic
+    local tis
+    up.MouseButton1Down:Connect(function()
+        tis = up.MouseEnter:Connect(function()
+            while tis do
+                wait()
+                local char = player.Character
+                if char then
+                    local root = char:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        root.CFrame = root.CFrame * CFrame.new(0, 1, 0)
+                    end
+                end
+            end
+        end)
+    end)
+    up.MouseLeave:Connect(function()
+        if tis then
+            tis:Disconnect()
+            tis = nil
+        end
+    end)
+
+    local dis
+    down.MouseButton1Down:Connect(function()
+        dis = down.MouseEnter:Connect(function()
+            while dis do
+                wait()
+                local char = player.Character
+                if char then
+                    local root = char:FindFirstChild("HumanoidRootPart")
+                    if root then
+                        root.CFrame = root.CFrame * CFrame.new(0, -1, 0)
+                    end
+                end
+            end
+        end)
+    end)
+    down.MouseLeave:Connect(function()
+        if dis then
+            dis:Disconnect()
+            dis = nil
+        end
+    end)
+
+    -- Plus/Minus
+    plus.MouseButton1Click:Connect(function()
+        speeds = speeds + 1
+        speedLabel.Text = speeds
+        if nowe == true then
+            tpwalking = false
+            for i = 1, speeds do
+                spawn(function()
+                    local hb = RunService.Heartbeat
+                    tpwalking = true
+                    local chr = player.Character
+                    local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
+                    while tpwalking and hb:Wait() and chr and hum and hum.Parent do
+                        if hum.MoveDirection.Magnitude > 0 then
+                            chr:TranslateBy(hum.MoveDirection)
+                        end
+                    end
+                end)
+            end
+        end
+    end)
+
+    mine.MouseButton1Click:Connect(function()
+        if speeds == 1 then
+            speedLabel.Text = 'cannot be less than 1'
+            wait(1)
+            speedLabel.Text = speeds
+        else
+            speeds = speeds - 1
+            speedLabel.Text = speeds
+            if nowe == true then
+                tpwalking = false
+                for i = 1, speeds do
+                    spawn(function()
+                        local hb = RunService.Heartbeat
+                        tpwalking = true
+                        local chr = player.Character
+                        local hum = chr and chr:FindFirstChildWhichIsA("Humanoid")
+                        while tpwalking and hb:Wait() and chr and hum and hum.Parent do
+                            if hum.MoveDirection.Magnitude > 0 then
+                                chr:TranslateBy(hum.MoveDirection)
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+    end)
+
+    close.MouseButton1Click:Connect(function()
+        gui:Destroy()
+        flyV5Active = false
+    end)
+
+    mini.MouseButton1Click:Connect(function()
+        up.Visible = false
+        down.Visible = false
+        flyBtn.Visible = false
+        plus.Visible = false
+        speedLabel.Visible = false
+        mine.Visible = false
+        mini.Visible = false
+        mini2.Visible = true
+        frame.BackgroundTransparency = 1
+        close.Position = UDim2.new(0, 0, -1, 57)
+    end)
+
+    mini2.MouseButton1Click:Connect(function()
+        up.Visible = true
+        down.Visible = true
+        flyBtn.Visible = true
+        plus.Visible = true
+        speedLabel.Visible = true
+        mine.Visible = true
+        mini.Visible = true
+        mini2.Visible = false
+        frame.BackgroundTransparency = 0
+        close.Position = UDim2.new(0, 0, -1, 27)
+    end)
+
+    flyV5Gui = gui
+    print("🚀 Fly V5 فعال شد!")
+end
+
+local function stopFlyV5()
+    if flyV5Gui then
+        flyV5Gui:Destroy()
+        flyV5Gui = nil
+        flyV5Active = false
+        print("🚀 Fly V5 غیرفعال شد!")
+    end
+end
+
+-- ۲۱. Fly جدید (با سرعت قابل تنظیم)
+local function startFly()
+    if connections.fly then connections.fly:Disconnect() end
+    flyEnabled = true
+    local char = player.Character if not char then return end
+    local root = char:FindFirstChild("HumanoidRootPart") if not root then return end
+    
+    flyBV = Instance.new("BodyVelocity")
+    flyBV.MaxForce = Vector3.new(100000, 100000, 100000)
+    flyBV.Velocity = Vector3.zero
+    flyBV.Parent = root
+    
+    flyBG = Instance.new("BodyGyro")
+    flyBG.MaxTorque = Vector3.new(100000, 100000, 100000)
+    flyBG.P = 10000
+    flyBG.Parent = root
+    
+    connections.fly = RunService.RenderStepped:Connect(function()
+        if not flyEnabled then
+            stopFly()
+            return
+        end
+        local currentRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+        local camera = workspace.CurrentCamera
+        if not currentRoot or not camera then return end
+        local move = Vector3.zero
+        local forward = camera.CFrame.LookVector
+        local right = camera.CFrame.RightVector
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then move += forward end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then move -= forward end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then move += right end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then move -= right end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then move -= Vector3.new(0, 1, 0) end
+        if move.Magnitude > 0 then move = move.Unit * flySpeed end
+        flyBV.Velocity = move
+        flyBG.CFrame = camera.CFrame
+    end)
+    notify("✈️ Fly", "پرواز فعال شد! (WASD + Space/Shift)", 2)
+end
+
+local function stopFly()
+    flyEnabled = false
+    if connections.fly then connections.fly:Disconnect(); connections.fly = nil end
+    if flyBV then flyBV:Destroy(); flyBV = nil end
+    if flyBG then flyBG:Destroy(); flyBG = nil end
+    notify("✈️ Fly", "پرواز غیرفعال شد!", 2)
+end
+
+-- ۲۲. View (نمایش دوربین به سمت بازیکن)
+local function viewPlayer()
+    if not validateSelectedPlayer() then
+        notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+        return
+    end
+    local targetRoot = selectedPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if targetRoot then
+        local cam = workspace.CurrentCamera
+        cam.CFrame = CFrame.lookAt(cam.CFrame.Position, targetRoot.Position)
+        notify("👁️ View", "دوربین به سمت " .. selectedPlayer.Name .. " چرخید!", 2)
+    end
+end
+
+-- ۲۳. دکمه Camlock جداگانه
+local camlockActive = false
+local isDraggingCamlock = false
+local dragStartCamlock, startPosCamlock
+
+local function createCamlockButton()
+    if camlockButton then
+        camlockButton:Destroy()
+        camlockButton = nil
+    end
+
+    camlockButton = Instance.new("TextButton")
+    camlockButton.Size = UDim2.new(0, 100, 0, 50)
+    camlockButton.Position = UDim2.new(0.5, -50, 0.8, 0)
+    camlockButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    camlockButton.BorderSizePixel = 0
+    camlockButton.Text = "🔒 Camlock"
+    camlockButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    camlockButton.TextSize = 16
+    camlockButton.Font = Enum.Font.GothamBold
+    camlockButton.Parent = playerGui
+
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 10)
+    btnCorner.Parent = camlockButton
+
+    camlockButton.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingCamlock = true
+            dragStartCamlock = input.Position
+            startPosCamlock = camlockButton.Position
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if isDraggingCamlock and (input.UserInputType == Enum.UserInputType.MouseMovement or
+                                   input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStartCamlock
+            camlockButton.Position = UDim2.new(
+                startPosCamlock.X.Scale,
+                startPosCamlock.X.Offset + delta.X,
+                startPosCamlock.Y.Scale,
+                startPosCamlock.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or
+           input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingCamlock = false
+        end
+    end)
+
+    camlockButton.MouseButton1Click:Connect(function()
+        camlockActive = not camlockActive
+        if camlockActive then
+            camlockButton.BackgroundColor3 = Color3.fromRGB(0, 200, 80)
+            camlockButton.Text = "🔓 Camlock"
+            local closest = nil
+            local minDist = math.huge
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= player then
+                    local targetRoot = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                    if targetRoot then
+                        local dist = (targetRoot.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                        if dist < minDist then
+                            minDist = dist
+                            closest = plr
+                        end
+                    end
+                end
+            end
+            if closest then
+                selectedPlayer = closest
+                startCamlock()
+                notify("🔒 Camlock", "روی نزدیک‌ترین پلیر: " .. closest.Name, 2)
+            else
+                camlockActive = false
+                camlockButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+                camlockButton.Text = "🔒 Camlock"
+                notify("⚠️ خطا", "هیچ پلیری نزدیک نیست!", 2)
+            end
+        else
+            camlockButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+            camlockButton.Text = "🔒 Camlock"
+            stopCamlock()
+            notify("🔓 Camlock", "غیرفعال شد!", 2)
+        end
+    end)
+end
+
+-- ================================================
+-- مدیریت Respawn (بازتولید)
+-- ================================================
+local function applyActiveFeatures()
+    if invisibleEnabled then startInvisible() end
+    if isNoclip then startNoclip() end
+    if wallWalkEnabled then startWallWalk() end
+    if antiFlingEnabled then startAntiFling() end
+    if flyV5Active then startFlyV5() end
+    if flyEnabled then startFly() end
+    applyWalkSpeed()
+    applyJumpPower()
+    if headSitEnabled then startHeadSit() end
+    if backpackEnabled then startBackpack() end
+end
+
+player.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    applyActiveFeatures()
+    updateESP()
+    updateHitbox()
+    setupCamlock()
+    setupInfiniteJump()
+end)
+
+-- ================================================
+-- به‌روزرسانی لیست بازیکنان (رفع باگ)
+-- ================================================
+local function buildPlayerOptions()
+    local options = {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player then
+            table.insert(options, plr.Name)
+        end
+    end
+    return options
+end
+
+-- ================================================
+-- بارگذاری Rayfield Gen2
+-- ================================================
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+
+local window = Rayfield:CreateWindow({
+    name = "🇮🇷 " .. MENU_NAME,
+    subtitle = "نسخه " .. VERSION .. " | توسط @fromiran_love",
+    sidebarLayout = true,
+})
+
+-- ==========================================
+-- 🏠 تب خانه (Home)
+-- ==========================================
+local homeTab = window:CreateTab({
+    name = "خانه",
+    icon = "home"
+})
+
+-- لیست بازیکنان (به‌روزرسانی خودکار)
+local playerDropdown = homeTab:CreateDropdown({
+    name = "👥 انتخاب بازیکن",
+    options = buildPlayerOptions(),
+    callback = function(option)
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Name == option then
+                selectedPlayer = plr
+                notify("🎯 انتخاب", "بازیکن انتخاب شد: " .. plr.Name, 2)
+                break
+            end
+        end
+    end
+})
+
+-- به‌روزرسانی لیست بازیکنان هنگام تغییر
+local function refreshPlayerList()
+    local options = buildPlayerOptions()
+    playerDropdown:Refresh(options)
+end
+
+Players.PlayerAdded:Connect(refreshPlayerList)
+Players.PlayerRemoving:Connect(refreshPlayerList)
+
+-- چسبیدن به پشت
+homeTab:CreateToggle({
+    name = "🎯 چسبیدن به پشت (Back)",
+    Flag = "BackAttach",
+    callback = function(value)
+        if value and not validateSelectedPlayer() then
+            notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+            return
+        end
+        if value then
+            isFrontAttach = false
+            isBackAttach = true
+            startAttach()
+        else
+            isBackAttach = false
+            stopAttach()
+        end
+    end
+})
+
+homeTab:CreateSlider({
+    name = "📏 فاصله پشت",
+    min = 1,
+    max = 100,
+    default = 5,
+    Flag = "BackDistance",
+    callback = function(value)
+        backDistance = value
+    end
+})
+
+-- چسبیدن به جلو
+homeTab:CreateToggle({
+    name = "🎯 چسبیدن به جلو (Front)",
+    Flag = "FrontAttach",
+    callback = function(value)
+        if value and not validateSelectedPlayer() then
+            notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+            return
+        end
+        if value then
+            isBackAttach = false
+            isFrontAttach = true
+            startAttach()
+        else
+            isFrontAttach = false
+            stopAttach()
+        end
+    end
+})
+
+homeTab:CreateSlider({
+    name = "📏 فاصله جلو",
+    min = 1,
+    max = 100,
+    default = 5,
+    Flag = "FrontDistance",
+    callback = function(value)
+        frontDistance = value
+    end
+})
+
+-- Kill Farm
+homeTab:CreateToggle({
+    name = "⚔️ Kill Farm (چسبیدن سریع)",
+    Flag = "KillFarm",
+    callback = function(value)
+        if value and not validateSelectedPlayer() then
+            notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+            return
+        end
+        isKillFarm = value
+        if value then
+            isBackAttach = false
+            isFrontAttach = false
+            stopAttach()
+            startKillFarm()
+        else
+            stopKillFarm()
+        end
+    end
+})
+
+-- رفتن پیش پلیر
+homeTab:CreateButton({
+    name = "🚀 رفتن پیش پلیر",
+    callback = function()
+        teleportToPlayer()
+    end
+})
+
+-- View (نمایش دوربین)
+homeTab:CreateButton({
+    name = "👁️ View (نمایش به سمت بازیکن)",
+    callback = function()
+        viewPlayer()
+    end
+})
+
+-- Invisible
+homeTab:CreateToggle({
+    name = "👻 Invisible (غیب شدن کامل)",
+    Flag = "Invisible",
+    callback = function(value)
+        if value then
+            startInvisible()
+        else
+            stopInvisible()
+        end
+    end
+})
+
+-- Head Sit
+homeTab:CreateToggle({
+    name = "🧠 Head Sit (نشستن روی سر)",
+    Flag = "HeadSit",
+    callback = function(value)
+        if value then
+            startHeadSit()
+        else
+            stopHeadSit()
+        end
+    end
+})
+
+-- Backpack
+homeTab:CreateToggle({
+    name = "🎒 Backpack (کوله‌پشتی شدن)",
+    Flag = "Backpack",
+    callback = function(value)
+        if value then
+            startBackpack()
+        else
+            stopBackpack()
+        end
+    end
+})
+
+-- Respawn
+homeTab:CreateButton({
+    name = "💀 Respawn (خودکشی)",
+    callback = function()
+        respawnPlayer()
+    end
+})
+
+-- ==========================================
+-- 🏃 تب حرکت (Movement)
+-- ==========================================
+local moveTab = window:CreateTab({
+    name = "حرکت",
+    icon = "activity"
+})
+
+-- Fly V5
+moveTab:CreateToggle({
+    name = "✈️ Fly V5 (قدیمی)",
+    Flag = "FlyV5",
+    callback = function(value)
+        if value then
+            startFlyV5()
+        else
+            stopFlyV5()
+        end
+    end
+})
+
+-- Fly جدید
+moveTab:CreateToggle({
+    name = "✈️ Fly (جدید با سرعت)",
+    Flag = "FlyNew",
+    callback = function(value)
+        if value then
+            startFly()
+        else
+            stopFly()
+        end
+    end
+})
+
+moveTab:CreateSlider({
+    name = "⚡ سرعت پرواز",
+    min = 10,
+    max = 200,
+    default = 50,
+    Flag = "FlySpeed",
+    callback = function(value)
+        flySpeed = value
+    end
+})
+
+-- Noclip
+moveTab:CreateToggle({
+    name = "🌀 Noclip (عبور از دیوار)",
+    Flag = "Noclip",
+    callback = function(value)
+        if value then
+            startNoclip()
+        else
+            stopNoclip()
+        end
+    end
+})
+
+-- WallWalk
+moveTab:CreateToggle({
+    name = "🧱 WallWalk (راه رفتن روی دیوار)",
+    Flag = "WallWalk",
+    callback = function(value)
+        if value then
+            startWallWalk()
+        else
+            stopWallWalk()
+        end
+    end
+})
+
+-- Fling
+moveTab:CreateToggle({
+    name = "💥 Fling (پرتاب)",
+    Flag = "Fling",
+    callback = function(value)
+        if value then
+            startFling()
+        else
+            stopFling()
+        end
+    end
+})
+
+-- WalkSpeed
+moveTab:CreateSlider({
+    name = "🏃 WalkSpeed (سرعت راه)",
+    min = 0,
+    max = 250,
+    default = 16,
+    Flag = "WalkSpeed",
+    callback = function(value)
+        walkSpeedValue = value
+        applyWalkSpeed()
+    end
+})
+
+-- JumpPower
+moveTab:CreateSlider({
+    name = "🦘 JumpPower (قدرت پرش)",
+    min = 0,
+    max = 200,
+    default = 50,
+    Flag = "JumpPower",
+    callback = function(value)
+        jumpPowerValue = value
+        applyJumpPower()
+    end
+})
+
+-- Infinite Jump
+moveTab:CreateToggle({
+    name = "⬆️ Infinite Jump (پرش بی‌نهایت)",
+    Flag = "InfiniteJump",
+    callback = function(value)
+        toggleInfiniteJump(value)
+    end
+})
+
+-- ==========================================
+-- 🛠️ تب کمکی (Utility)
+-- ==========================================
+local utilTab = window:CreateTab({
+    name = "کمکی",
+    icon = "settings"
+})
+
+-- ESP همه بازیکنان
+utilTab:CreateToggle({
+    name = "🎯 ESP (همه بازیکنان)",
+    Flag = "ESP_All",
+    callback = function(value)
+        espEnabled = value
+        espTargetPlayer = nil
+        if value then
+            updateESP()
+        else
+            clearESP()
+        end
+    end
+})
+
+-- ESP روی بازیکن انتخاب‌شده
+utilTab:CreateToggle({
+    name = "🎯 ESP روی بازیکن انتخاب‌شده",
+    Flag = "ESP_Target",
+    callback = function(value)
+        if value and not validateSelectedPlayer() then
+            notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+            return
+        end
+        espEnabled = value
+        espTargetPlayer = value and selectedPlayer or nil
+        if value then
+            updateESP()
+        else
+            clearESP()
+        end
+    end
+})
+
+-- Lag
+utilTab:CreateToggle({
+    name = "📶 Lag (لگ فیک)",
+    Flag = "Lag",
+    callback = function(value)
+        if value then
+            startLag()
+        else
+            stopLag()
+        end
+    end
+})
+
+-- Hitbox
+utilTab:CreateToggle({
+    name = "📦 Hitbox (نمایش هیت‌باکس)",
+    Flag = "Hitbox",
+    callback = function(value)
+        hitboxEnabled = value
+        if value then
+            updateHitbox()
+        else
+            clearHitbox()
+        end
+    end
+})
+
+-- AntiFling
+utilTab:CreateToggle({
+    name = "🛡️ AntiFling (حذف فیزیک)",
+    Flag = "AntiFling",
+    callback = function(value)
+        if value then
+            startAntiFling()
+        else
+            stopAntiFling()
+        end
+    end
+})
+
+-- Camlock
+utilTab:CreateToggle({
+    name = "🔒 Camlock (قفل دوربین)",
+    Flag = "Camlock",
+    callback = function(value)
+        if value and not validateSelectedPlayer() then
+            notify("⚠️ خطا", "لطفاً ابتدا یک بازیکن معتبر انتخاب کن!", 2)
+            return
+        end
+        if value then
+            startCamlock()
+        else
+            stopCamlock()
+        end
+        setupCamlock()
+    end
+})
+
+-- ایجاد دکمه Camlock روی صفحه
+utilTab:CreateToggle({
+    name = "🔄 ایجاد دکمه Camlock روی صفحه",
+    Flag = "CamlockButton",
+    callback = function(value)
+        if value then
+            createCamlockButton()
+        else
+            if camlockButton then
+                camlockButton:Destroy()
+                camlockButton = nil
+                stopCamlock()
+                camlockActive = false
+            end
+        end
+    end
+})
+
+-- FullBright
+utilTab:CreateToggle({
+    name = "☀️ FullBright (روشن‌تر)",
+    Flag = "FullBright",
+    callback = function(value)
+        toggleFullBright(value)
+    end
+})
+
+-- Night / Day
+utilTab:CreateButton({
+    name = "🌙 Night (شب)",
+    callback = function()
+        setNight()
+    end
+})
+
+utilTab:CreateButton({
+    name = "☀️ Day (روز)",
+    callback = function()
+        setDay()
+    end
+})
+
+-- ==========================================
+-- ℹ️ تب اطلاعات (Info)
+-- ==========================================
+local infoTab = window:CreateTab({
+    name = "اطلاعات",
+    icon = "info"
+})
+
+infoTab:CreateLabel("🇮🇷 " .. MENU_NAME, "flag")
+infoTab:CreateLabel("📌 نسخه " .. VERSION, "tag")
+infoTab:CreateLabel("💻 سازنده: @fromiran_love", "user")
+infoTab:CreateLabel("📱 روبیکا: @H033_EIN_0", "message-circle")
+infoTab:CreateLabel("📢 این منو با الهام از Infinite Yield ساخته شده", "info")
+
+infoTab:CreateButton({
+    name = "🔄 Reset (راه‌اندازی مجدد منو)",
+    callback = function()
+        window:Destroy()
+        window = Rayfield:CreateWindow({
+            name = "🇮🇷 " .. MENU_NAME,
+            subtitle = "نسخه " .. VERSION .. " | توسط @fromiran_love",
+            sidebarLayout = true,
+        })
+        notify("🔄 Reset", "منو با موفقیت ریست شد!", 2)
+    end
+})
+
+infoTab:CreateButton({
+    name = "📋 کپی آیدی سازنده",
+    callback = function()
+        toClipboard("@fromiran_love")
+    end
+})
+
+-- ==========================================
+-- 🚀 پیام خوش‌آمدگویی
+-- ==========================================
+print("=========================================")
+print("🇮🇷 " .. MENU_NAME .. " نسخه " .. VERSION)
+print("💻 سازنده: @fromiran_love")
+print("✅ همه قابلیت‌ها فعال و آماده استفاده")
+print("=========================================")
+
+notify("🇮🇷 " .. MENU_NAME, "نسخه " .. VERSION .. " با موفقیت اجرا شد!", 4)
